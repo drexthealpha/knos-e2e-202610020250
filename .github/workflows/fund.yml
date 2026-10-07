@@ -2,7 +2,7 @@
 # Called from this repository's own c19 workflows; the token's audience is the input. The token is never printed:
 # it is encrypted to the run's own public key below and kept one day as an artifact. This file decides nothing
 # about any work: whoever starts its caller chooses the audience.
-name: c19 prove
+name: c19 fund
 on:
   workflow_call:
     inputs:
