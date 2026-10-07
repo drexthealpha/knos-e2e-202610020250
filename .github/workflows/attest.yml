@@ -1,0 +1,49 @@
+# 0.3.18 track E: a judge's token for the knos_pay STAGING rehearsal (devnet, staging program ids only).
+# Called from a workflow started by hand; the token's audience is the input. The token is never printed: it is
+# encrypted to the rehearsal's own public key below and kept one day as an artifact.
+name: rc18 attest
+on:
+  workflow_call:
+    inputs:
+      aud:
+        required: true
+        type: string
+permissions: {}
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: ask GitHub for a token, encrypted to the rehearsal key
+        env:
+          AUD: ${{ inputs.aud }}
+          REHEARSAL_PUB: |
+            -----BEGIN PUBLIC KEY-----
+            MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAxfPEfBI3lq1RxrnkD6ul
+            jEu0bjqAeX9t0B3fYUBaZL75PEtie6b5dSKxcBacYqbtq1e2IV+E5N76ZBzXea3J
+            FMkKDP/OmesUpB0F/zm6JKx9BNtnZGfMVR+6YVsmWkit1gem5k2NuhliFzdskJcr
+            vpjY8EeyEqNx2cbbVKKmJokMCDl6IJ3Nvx+/nC4oWFrP4lCWWxjkp652Y71Mq528
+            GbAyITFolbyUSAiHIB6CW+cY9OfwOAkNe8M2RdXKbe93ohdko67u38qrqBPW4IOf
+            SvRotemmmxO7RJkart6BEDe6hOKt7Aqfd3V3ZbbG5sNOsJ+4pLLBXKum7nr7wOGx
+            mYSplh8y58+Fv5AOEw1cz3QwB8ihSJzlbi1xc6OheYc8XfkqZO2nZRxOpOy0W9Q7
+            pXT+2VMBpBJr7yfpYyJTw9BuG+ek5FPfzKlh1PTuLJnhbc2UvHtpjkyEhvEmanLS
+            FgW12wXcnh8xp0rHppwxqZKHlWzUUTNJ1pApNf+gNAitAgMBAAE=
+            -----END PUBLIC KEY-----
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$REHEARSAL_PUB" > pub.pem
+          Q=$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["AUD"], safe=""))')
+          curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$Q" \
+            | python3 -c 'import json, sys; open("token.jwt", "w").write(json.load(sys.stdin)["value"])'
+          openssl rand -hex 32 > k.txt
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in token.jwt -out token.enc -pass file:k.txt
+          openssl pkeyutl -encrypt -pubin -inkey pub.pem -pkeyopt rsa_padding_mode:oaep -in k.txt -out k.enc
+          rm -f token.jwt k.txt
+          mkdir out && mv token.enc k.enc out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: token-enc
+          path: out
+          retention-days: 1
